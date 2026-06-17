@@ -1,11 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.chat import router as chat_router
-from api.health import router as health_router
 from config import settings
 
-app = FastAPI(title="AI Chatbot API", version="1.0.0")
+from api.health import router as health_router
+from api.chat import router as chat_router
+from api.auth import router as auth_router
+from api.chats import router as chats_router
+from api.messages import router as messages_router
+from api.widget import router as widget_router
 
+app = FastAPI(
+    title="AI Chatbot Backend",
+    version="1.0.0",
+)
+
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -14,8 +23,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(health_router, prefix="/health", tags=["health"])
-app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
+# Routers
+app.include_router(health_router, prefix="/health")
+app.include_router(chat_router, prefix="/api/chat")
+app.include_router(auth_router)
+app.include_router(chats_router)
+app.include_router(messages_router, tags=["chat"])
+app.include_router(widget_router, prefix="/api/widget")
 
 
 @app.get("/")

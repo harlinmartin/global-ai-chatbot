@@ -24,11 +24,15 @@ class Settings(BaseSettings):
     # Qdrant (not used in Phase 1A, ready for Phase 3)
     qdrant_url: str = "http://localhost:6333"
 
+    # Security
+    jwt_secret: str = "change_me_in_production"
+    jwt_algorithm: str = "HS256"
+
     # Server
     backend_port: int = 8001
 
     # CORS
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://localhost:3001,http://localhost:8081"
 
     @property
     def cors_origins_list(self) -> list[str]:

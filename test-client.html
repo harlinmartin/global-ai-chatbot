@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Widget Test Client</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.5;
+            padding: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #f9fafb;
+            color: #111827;
+        }
+        h1 { color: #4F46E5; }
+        .demo-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>My Awesome Website</h1>
+    <p>This is a test client for the embedded AI chatbot widget.</p>
+    
+    <div class="demo-content">
+        <h2>Widget Should Appear Below</h2>
+        <p>If the script loads correctly, you should see a blue floating action button in the bottom right corner. Clicking it will open the chat interface.</p>
+        <p>The widget communicates with the backend via the Next.js iframe, using the <code>api_key</code> to authenticate with the FastAPI server.</p>
+    </div>
+
+    <!-- AI Widget Injection Script -->
+    <script 
+        src="http://localhost:3001/widget.js" 
+        data-api-key="2892f6d4-5e72-4243-893f-1801ea14a39d"
+        data-host="http://localhost:3001"
+    ></script>
+</body>
+</html>
