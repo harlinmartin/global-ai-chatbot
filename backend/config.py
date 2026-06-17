@@ -24,12 +24,24 @@ class Settings(BaseSettings):
     # Qdrant (not used in Phase 1A, ready for Phase 3)
     qdrant_url: str = "http://localhost:6333"
 
+    # Server
+    backend_port: int = 8001
+
     # CORS
     cors_origins: str = "http://localhost:3000"
 
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",")]
+
+    @property
+    def active_model(self) -> str:
+        """Model name for the currently selected provider — no client instantiation."""
+        return {
+            "groq": self.groq_model,
+            "openai": self.openai_model,
+            "ollama": self.ollama_model,
+        }.get(self.ai_provider.lower(), "unknown")
 
     class Config:
         env_file = ".env"

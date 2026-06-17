@@ -14,8 +14,11 @@ def get_ai_provider() -> AIProvider:
         return GroqProvider()
 
     if provider == "openai":
-        from ai.providers.openai_provider import OpenAIProvider
-        return OpenAIProvider()
+        # Implemented in Phase 2. Fail cleanly instead of ImportError on a missing module.
+        raise NotImplementedError(
+            "OpenAIProvider is not implemented yet (planned for Phase 2). "
+            "Use AI_PROVIDER=groq or AI_PROVIDER=ollama for now."
+        )
 
     if provider == "ollama":
         from ai.providers.ollama_provider import OllamaProvider

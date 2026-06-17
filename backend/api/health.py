@@ -9,5 +9,5 @@ async def health():
     return {
         "status": "ok",
         "provider": settings.ai_provider,
-        "model": settings.groq_model if settings.ai_provider == "groq" else settings.ollama_model,
+        "model": settings.active_model,
     }
