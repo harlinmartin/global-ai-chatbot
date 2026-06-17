@@ -158,6 +158,8 @@ Month 1  1A ✅ Chat + SSE streaming (no auth)              ← DONE, 18 tests g
          1C    Context window (last 10; summarize >30) + system-prompt clarify
          1.5   ★ EMBED SPIKE — prove cross-origin <script> → /api/widget/chat → SSE
                on a throwaway page. Forces API-key auth + dynamic CORS + tenancy early.
+         1.6   WIDGET UI OVERHAUL — Hostinger-style assistant (light mode, Chat/History tabs,
+               image uploads, thumbs up/down, star ratings, mobile layout, start new chat).
 
 Month 2  2     Finish AI abstraction: OpenAI/Gemini/Claude providers, per-workspace model
          3     Doc upload → extract → chunk (512/50) → embed (bge-small) → Qdrant + PG metadata
@@ -204,6 +206,7 @@ a manual verification (see §7) *and* a passing test file.
 - **1B** Register→JWT in httpOnly cookie; sidebar history survives refresh; delete removes from DB; chat belongs to its user; port/factory/health/database drift fixed.
 - **1C** 30-msg chat auto-summarizes oldest 20; "explain it more" resolves prior topic; vague query → one clarifying question.
 - **1.5** `test.html` on a different origin loads the bubble, sends a message via API key, streams a reply; request from a non-allow-listed origin is rejected.
+- **1.6** Widget displays light mode theme with Hostinger UI style; image upload works and AI responds; thumbs up/down saves to database; star rating triggers at end of chat.
 - **2** All providers satisfy `AIProvider`; model switch via env/workspace config; `AI_PROVIDER=openai` no longer crashes.
 - **3** Upload PDF → chunks visible in Qdrant (`:6333/dashboard`); metadata rows in PG.
 - **4** Query about a PDF → grounded answer; eval row written with question/chunks/latency/model.

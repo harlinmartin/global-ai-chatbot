@@ -20,6 +20,7 @@ class WidgetChatRequest(BaseModel):
     messages: list[Message]
     provider: str = None
     origin: str = None
+    image_base64: str = None
 
 import time
 # Simple in-memory rate limiter: { "ip_address": [timestamp1, timestamp2, ...] }
@@ -137,20 +138,55 @@ async def widget_stream_chat(
                 full_response += token
                 yield {"event": "token", "data": json.dumps({"token": token})}
 
-            yield status_event("generating", "Generating response...", "done")
-            yield {"event": "done", "data": json.dumps({"model": provider.model_name})}
-
             # Step 2: Save assistant response
             if full_response:
-                db.add(DBMessage(chat_id=chat.id, role="assistant", content=full_response))
+                assistant_msg = DBMessage(chat_id=chat.id, role="assistant", content=full_response)
+                db.add(assistant_msg)
                 await db.commit()
+                await db.refresh(assistant_msg)
+                
+                # Send the final ID down to the client so they can send feedback
+                yield {"event": "done", "data": json.dumps({"model": provider.model_name, "message_id": str(assistant_msg.id)})}
                 
                 # Check for summarization
                 if len(body.messages) + 1 >= 30:
                     from chat.summarizer import summarize_chat_background
                     asyncio.create_task(summarize_chat_background(str(chat.id)))
+            else:
+                yield {"event": "done", "data": json.dumps({"model": provider.model_name})}
 
         except Exception as e:
             yield {"event": "error", "data": json.dumps({"message": str(e)})}
 
     return EventSourceResponse(generate())
+
+class FeedbackRequest(BaseModel):
+    feedback: str # 'up' or 'down'
+
+@router.patch("/messages/{message_id}/feedback")
+async def widget_message_feedback(
+    message_id: str,
+    body: FeedbackRequest,
+    workspace: Workspace = Depends(get_workspace_from_api_key),
+    db: AsyncSession = Depends(get_db)
+):
+    # Verify the message belongs to a chat in this workspace
+    result = await db.execute(
+        select(DBMessage)
+        .join(Chat)
+        .filter(DBMessage.id == message_id, Chat.workspace_id == workspace.id)
+    )
+    message = result.scalar_one_or_none()
+    
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+        
+    # Update metadata
+    current_meta = message.metadata_ or {}
+    current_meta['feedback'] = body.feedback
+    message.metadata_ = current_meta
+    
+    db.add(message)
+    await db.commit()
+    
+    return {"status": "ok", "feedback": body.feedback}

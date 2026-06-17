@@ -111,7 +111,6 @@ async def test_widget_rate_limiting(client: AsyncClient, test_workspace: Workspa
         )
         assert response.status_code == 200
 
-    # The 11th request should be rate limited
     response = await client.post(
         "/api/widget/stream",
         headers={"Authorization": f"Bearer {test_workspace.api_key}"},
@@ -122,3 +121,43 @@ async def test_widget_rate_limiting(client: AsyncClient, test_workspace: Workspa
     )
     assert response.status_code == 429
     assert "Rate limit exceeded" in response.json()["detail"]
+
+@pytest.mark.asyncio
+async def test_widget_message_feedback(client: AsyncClient, test_workspace: Workspace):
+    # First generate a message so we have an ID
+    response = await client.post(
+        "/api/widget/stream",
+        headers={"Authorization": f"Bearer {test_workspace.api_key}"},
+        json={"session_id": "feedback_test", "messages": [{"role": "user", "content": "Hello"}]}
+    )
+    assert response.status_code == 200
+    
+    # We need a valid message_id from the DB for this workspace
+    from chat.models import Chat, Message
+    import database
+    
+    async with database.async_session_maker() as s:
+        chat = Chat(workspace_id=test_workspace.id, session_id="fb_test")
+        s.add(chat)
+        await s.commit()
+        await s.refresh(chat)
+        
+        msg = Message(chat_id=chat.id, role="assistant", content="test")
+        s.add(msg)
+        await s.commit()
+        await s.refresh(msg)
+        msg_id = str(msg.id)
+
+    # Test the feedback endpoint
+    fb_response = await client.patch(
+        f"/api/widget/messages/{msg_id}/feedback",
+        headers={"Authorization": f"Bearer {test_workspace.api_key}"},
+        json={"feedback": "up"}
+    )
+    assert fb_response.status_code == 200
+    assert fb_response.json()["feedback"] == "up"
+    
+    # Verify metadata in DB
+    async with database.async_session_maker() as s:
+        db_msg = await s.get(Message, msg.id)
+        assert db_msg.metadata_["feedback"] == "up"
