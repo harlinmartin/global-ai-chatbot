@@ -65,7 +65,7 @@
 
   // Create iframe
   const iframe = document.createElement('iframe');
-  iframe.src = `${hostUrl}/embed/chat?api_key=${encodeURIComponent(apiKey)}&session_id=${encodeURIComponent(sessionId)}`;
+  iframe.src = `${hostUrl}/embed/chat?api_key=${encodeURIComponent(apiKey)}&session_id=${encodeURIComponent(sessionId)}&origin=${encodeURIComponent(window.location.origin)}`;
   iframe.style.width = '100%';
   iframe.style.height = '100%';
   iframe.style.border = 'none';

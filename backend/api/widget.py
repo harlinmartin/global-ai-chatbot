@@ -19,6 +19,13 @@ class WidgetChatRequest(BaseModel):
     session_id: str
     messages: list[Message]
     provider: str = None
+    origin: str = None
+
+import time
+# Simple in-memory rate limiter: { "ip_address": [timestamp1, timestamp2, ...] }
+IP_RATE_LIMITS = {}
+RATE_LIMIT_WINDOW_SEC = 60
+RATE_LIMIT_MAX_REQUESTS = 10
 
 async def get_workspace_from_api_key(
     authorization: Optional[str] = Header(None),
@@ -49,6 +56,28 @@ async def widget_stream_chat(
     workspace: Workspace = Depends(get_workspace_from_api_key),
     db: AsyncSession = Depends(get_db)
 ):
+    # Rate Limiting Check (per IP)
+    client_ip = request.client.host if request.client else "unknown"
+    current_time = time.time()
+    if client_ip not in IP_RATE_LIMITS:
+        IP_RATE_LIMITS[client_ip] = []
+    
+    # Filter out old requests outside the window
+    IP_RATE_LIMITS[client_ip] = [t for t in IP_RATE_LIMITS[client_ip] if current_time - t < RATE_LIMIT_WINDOW_SEC]
+    
+    if len(IP_RATE_LIMITS[client_ip]) >= RATE_LIMIT_MAX_REQUESTS:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+        
+    IP_RATE_LIMITS[client_ip].append(current_time)
+
+    # Origin Verification
+    allowed_domains = workspace.config.get("allowed_domains", [])
+    if allowed_domains and body.origin:
+        # Check if the requested origin is in the allowed list
+        # E.g., origin: "http://localhost:8080"
+        if body.origin not in allowed_domains:
+            raise HTTPException(status_code=403, detail="Domain not allowed")
+
     # Get or create chat for this anonymous session
     chat_result = await db.execute(
         select(Chat).filter(

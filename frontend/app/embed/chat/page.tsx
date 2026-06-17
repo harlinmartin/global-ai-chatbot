@@ -51,14 +51,16 @@ function EmbedChatContent() {
 
     try {
       const BACKEND_URL = 'http://localhost:8001';
-      console.log("Fetching from:", `${BACKEND_URL}/api/widget/stream`);
+      const searchParams = new URL(window.location.href).searchParams;
+      const origin = searchParams.get('origin');
+      
       const response = await fetch(`${BACKEND_URL}/api/widget/stream`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`
         },
-        body: JSON.stringify({ session_id: sessionId, messages: history }),
+        body: JSON.stringify({ session_id: sessionId, messages: history, origin }),
       });
 
       if (!response.ok) {
