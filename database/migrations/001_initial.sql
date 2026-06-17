@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
   owner_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name        TEXT NOT NULL,
   api_key     TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::TEXT,  -- public widget key (read/chat scope)
+  config      JSONB NOT NULL DEFAULT '{}',  -- branding, model, allowed_domains
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -39,6 +40,15 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Stores summarized older turns for context compression (Phase 1C)
+CREATE TABLE IF NOT EXISTS chat_summaries (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  chat_id                 UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  summary                 TEXT NOT NULL,
+  covers_through_message  UUID REFERENCES messages(id),
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Indexes for the common access paths
 CREATE INDEX IF NOT EXISTS idx_workspaces_owner   ON workspaces(owner_id);
 CREATE INDEX IF NOT EXISTS idx_workspaces_api_key ON workspaces(api_key);
@@ -46,3 +56,4 @@ CREATE INDEX IF NOT EXISTS idx_chats_workspace    ON chats(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_chats_user         ON chats(user_id);
 CREATE INDEX IF NOT EXISTS idx_chats_session      ON chats(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_chat      ON messages(chat_id);
+CREATE INDEX IF NOT EXISTS idx_summaries_chat     ON chat_summaries(chat_id);

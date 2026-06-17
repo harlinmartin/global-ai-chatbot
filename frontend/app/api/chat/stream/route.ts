@@ -1,11 +1,17 @@
 import { NextRequest } from "next/server";
+import { cookies } from "next/headers";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
 
   const backendRes = await fetch("http://localhost:8001/api/chat/stream", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {})
+    },
     body: JSON.stringify(body),
   });
 

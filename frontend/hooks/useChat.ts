@@ -6,8 +6,8 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-export function useChat() {
-  const [messages, setMessages] = useState<Message[]>([]);
+export function useChat(initialMessages: Message[] = [], chatId?: string, provider?: string) {
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [steps, setSteps] = useState<StatusStep[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const abortRef = useRef(false);
@@ -48,45 +48,67 @@ export function useChat() {
         content: m.content,
       }));
 
-      await streamChat(history, {
-        onStatus: (step, label, state) => updateStepState(step, label, state),
-        onToken: (token) => {
-          if (abortRef.current) return;
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? { ...m, content: m.content + token }
-                : m
-            )
-          );
+      let currentChatId = chatId;
+      if (!currentChatId) {
+        try {
+          const { createChatAction } = await import("@/app/actions/chat");
+          const title = content.slice(0, 40) + (content.length > 40 ? "..." : "");
+          const result = await createChatAction(title);
+          if (result.chat) {
+            currentChatId = result.chat.id;
+            window.history.replaceState(null, '', `/chat/${currentChatId}`);
+          } else {
+            console.error(result.error);
+          }
+        } catch (e) {
+          console.error("Failed to create chat", e);
+        }
+      }
+
+      await streamChat(
+        history,
+        {
+          onStatus: (step, label, state) => updateStepState(step, label, state),
+          onToken: (token) => {
+            if (abortRef.current) return;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? { ...m, content: m.content + token }
+                  : m
+              )
+            );
+          },
+          onDone: () => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, isStreaming: false } : m
+              )
+            );
+            setSteps([]);
+            setIsLoading(false);
+          },
+          onError: (msg) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? {
+                      ...m,
+                      content: `⚠️ Error: ${msg}`,
+                      isStreaming: false,
+                    }
+                  : m
+              )
+            );
+            setSteps([]);
+            setIsLoading(false);
+          },
         },
-        onDone: () => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId ? { ...m, isStreaming: false } : m
-            )
-          );
-          setSteps([]);
-          setIsLoading(false);
-        },
-        onError: (msg) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? {
-                    ...m,
-                    content: `⚠️ Error: ${msg}`,
-                    isStreaming: false,
-                  }
-                : m
-            )
-          );
-          setSteps([]);
-          setIsLoading(false);
-        },
-      });
+        currentChatId,
+        provider
+      );
     },
-    [messages, isLoading, updateStepState]
+    [messages, isLoading, updateStepState, provider]
   );
 
   const clearChat = useCallback(() => {

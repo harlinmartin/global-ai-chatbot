@@ -148,7 +148,7 @@ def reset_sse_event_loop():
 
 
 class TestChatStream:
-    async def test_stream_endpoint_returns_200(self, client):
+    async def test_stream_endpoint_returns_200(self, client, chat_id):
         reset_sse_event_loop()
         with patch("api.chat.get_ai_provider") as mock_factory:
             mock_provider = MagicMock()
@@ -158,11 +158,11 @@ class TestChatStream:
 
             resp = await client.post(
                 "/api/chat/stream",
-                json={"messages": [{"role": "user", "content": "hi"}]},
+                json={"chat_id": chat_id, "messages": [{"role": "user", "content": "hi"}]},
             )
             assert resp.status_code == 200
 
-    async def test_stream_content_type_is_event_stream(self, client):
+    async def test_stream_content_type_is_event_stream(self, client, chat_id):
         reset_sse_event_loop()
         with patch("api.chat.get_ai_provider") as mock_factory:
             mock_provider = MagicMock()
@@ -172,11 +172,11 @@ class TestChatStream:
 
             resp = await client.post(
                 "/api/chat/stream",
-                json={"messages": [{"role": "user", "content": "test"}]},
+                json={"chat_id": chat_id, "messages": [{"role": "user", "content": "test"}]},
             )
             assert "text/event-stream" in resp.headers.get("content-type", "")
 
-    async def test_stream_contains_status_events(self, client):
+    async def test_stream_contains_status_events(self, client, chat_id):
         reset_sse_event_loop()
         with patch("api.chat.get_ai_provider") as mock_factory:
             mock_provider = MagicMock()
@@ -186,12 +186,12 @@ class TestChatStream:
 
             resp = await client.post(
                 "/api/chat/stream",
-                json={"messages": [{"role": "user", "content": "test"}]},
+                json={"chat_id": chat_id, "messages": [{"role": "user", "content": "test"}]},
             )
             body = resp.text
             assert "event: status" in body
 
-    async def test_stream_contains_token_events(self, client):
+    async def test_stream_contains_token_events(self, client, chat_id):
         reset_sse_event_loop()
         with patch("api.chat.get_ai_provider") as mock_factory:
             mock_provider = MagicMock()
@@ -201,12 +201,12 @@ class TestChatStream:
 
             resp = await client.post(
                 "/api/chat/stream",
-                json={"messages": [{"role": "user", "content": "test"}]},
+                json={"chat_id": chat_id, "messages": [{"role": "user", "content": "test"}]},
             )
             body = resp.text
             assert "event: token" in body
 
-    async def test_stream_contains_done_event(self, client):
+    async def test_stream_contains_done_event(self, client, chat_id):
         reset_sse_event_loop()
         with patch("api.chat.get_ai_provider") as mock_factory:
             mock_provider = MagicMock()
@@ -216,12 +216,12 @@ class TestChatStream:
 
             resp = await client.post(
                 "/api/chat/stream",
-                json={"messages": [{"role": "user", "content": "test"}]},
+                json={"chat_id": chat_id, "messages": [{"role": "user", "content": "test"}]},
             )
             body = resp.text
             assert "event: done" in body
 
-    async def test_stream_token_data_is_valid_json(self, client):
+    async def test_stream_token_data_is_valid_json(self, client, chat_id):
         reset_sse_event_loop()
         with patch("api.chat.get_ai_provider") as mock_factory:
             mock_provider = MagicMock()
@@ -231,7 +231,7 @@ class TestChatStream:
 
             resp = await client.post(
                 "/api/chat/stream",
-                json={"messages": [{"role": "user", "content": "hi"}]},
+                json={"chat_id": chat_id, "messages": [{"role": "user", "content": "hi"}]},
             )
             body = resp.text
             for line in body.splitlines():
@@ -240,7 +240,7 @@ class TestChatStream:
                     parsed = json.loads(payload)  # Must not raise
                     assert isinstance(parsed, dict)
 
-    async def test_stream_rejects_empty_messages(self, client):
+    async def test_stream_rejects_empty_messages(self, client, chat_id):
         reset_sse_event_loop()
         """Empty messages list should still return a valid SSE stream (not 500)."""
         with patch("api.chat.get_ai_provider") as mock_factory:
@@ -251,11 +251,11 @@ class TestChatStream:
 
             resp = await client.post(
                 "/api/chat/stream",
-                json={"messages": []},
+                json={"chat_id": chat_id, "messages": []},
             )
             assert resp.status_code == 200
 
-    async def test_stream_only_sends_last_10_messages(self, client):
+    async def test_stream_only_sends_last_10_messages(self, client, chat_id):
         reset_sse_event_loop()
         """Context window: only last 10 user messages should be sent to provider."""
         captured_messages = []
@@ -272,7 +272,10 @@ class TestChatStream:
 
             # Send 15 messages
             messages = [{"role": "user", "content": f"msg {i}"} for i in range(15)]
-            await client.post("/api/chat/stream", json={"messages": messages})
+            await client.post(
+                "/api/chat/stream",
+                json={"chat_id": chat_id, "messages": messages},
+            )
 
             # system prompt + 10 messages = 11 total (system is prepended in api/chat.py)
             assert len(captured_messages) <= 11
