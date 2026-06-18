@@ -15,7 +15,7 @@ from database import get_db
 # Register every model on the shared Base before create_all.
 from auth.models import Base
 import auth.models  # noqa: F401  (User)
-import chat.models  # noqa: F401  (Workspace, Chat, Message, ChatSummary)
+import chat.models  # noqa: F401  (Workspace, Chat, Message, ChatSummary, Document, DocumentChunk)
 
 from main import app
 

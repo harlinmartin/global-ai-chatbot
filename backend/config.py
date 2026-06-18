@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # Qdrant (not used in Phase 1A, ready for Phase 3)
     qdrant_url: str = "http://localhost:6333"
 
+    # Embeddings (Phase 3) — local bge-small, swappable to OpenAI later
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_dim: int = 384
+
     # Security
     jwt_secret: str = "change_me_in_production"
     jwt_algorithm: str = "HS256"

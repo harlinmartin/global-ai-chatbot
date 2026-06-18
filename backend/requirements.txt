@@ -20,6 +20,12 @@ python-jose==3.3.0
 python-multipart==0.0.9
 email-validator==2.3.0
 
+# Phase 3 (RAG / Knowledge Base)
+qdrant-client==1.9.1
+pypdf==4.2.0
+tiktoken==0.7.0
+sentence-transformers==3.0.1
+
 # Testing
 pytest==9.1.0
 pytest-asyncio==1.4.0

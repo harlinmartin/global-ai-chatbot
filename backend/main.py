@@ -8,6 +8,7 @@ from api.auth import router as auth_router
 from api.chats import router as chats_router
 from api.messages import router as messages_router
 from api.widget import router as widget_router
+from api.docs import router as docs_router
 
 app = FastAPI(
     title="AI Chatbot Backend",
@@ -30,6 +31,7 @@ app.include_router(auth_router)
 app.include_router(chats_router)
 app.include_router(messages_router, tags=["chat"])
 app.include_router(widget_router, prefix="/api/widget")
+app.include_router(docs_router)
 
 
 @app.get("/")

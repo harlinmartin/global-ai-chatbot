@@ -44,3 +44,31 @@ class ChatSummary(Base):
     summary: Mapped[str] = mapped_column(String, nullable=False)
     covers_through_message: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("messages.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), nullable=False)
+
+
+class Document(Base):
+    """One uploaded file per workspace."""
+    __tablename__ = "documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    filename: Mapped[str] = mapped_column(String, nullable=False)
+    # pending | ready | failed
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    chunk_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    file_size_bytes: Mapped[int] = mapped_column(nullable=False, default=0)
+    error: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), nullable=False)
+
+
+class DocumentChunk(Base):
+    """One text chunk (and its Qdrant point ID) per document."""
+    __tablename__ = "document_chunks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    chunk_index: Mapped[int] = mapped_column(nullable=False)
+    text_preview: Mapped[str] = mapped_column(String, nullable=False)  # first 200 chars
+    qdrant_point_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), nullable=False)
