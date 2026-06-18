@@ -1,4 +1,5 @@
 import json
+import time
 import asyncio
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
@@ -53,6 +54,8 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
 
     async def generate():
         full_response = ""
+        t0 = time.perf_counter()
+        retrieved_chunks: list[dict] = []
         try:
             # Step 1: Save the user's latest message
             user_msg = body.messages[-1]
@@ -71,11 +74,19 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
             )
             latest_summary = summary_result.scalar_one_or_none()
 
-            # Build messages: system prompt + summary + last 10 conversation turns
+            # Step 1.5: RAG — retrieve relevant context from the workspace knowledge base
+            yield status_event("searching", "Searching knowledge base...", "active")
+            from docs import rag
+            context_str, retrieved_chunks = await rag.get_context(chat.workspace_id, user_msg.content)
+            yield status_event("searching", "Searching knowledge base...", "done")
+
+            # Build messages: system prompt + summary + retrieved context + last 10 turns
             system_content = SYSTEM_PROMPT
             if latest_summary:
                 system_content += f"\n\nHere is a summary of the earlier conversation for context:\n{latest_summary.summary}"
-                
+            if context_str:
+                system_content += f"\n\n{context_str}"
+
             system = [{"role": "system", "content": system_content}]
             history = [{"role": m.role, "content": m.content} for m in body.messages[-10:]]
             messages = system + history
@@ -94,17 +105,30 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
                 yield {"event": "token", "data": json.dumps({"token": token})}
 
             yield status_event("generating", "Generating response...", "done")
-            yield {"event": "done", "data": json.dumps({"model": provider.model_name})}
+            yield {"event": "done", "data": json.dumps({"model": provider.model_name, "answer": full_response})}
 
             # Step 2: Save the AI's response
             if full_response:
                 db.add(DBMessage(chat_id=body.chat_id, role="assistant", content=full_response))
                 await db.commit()
-                
+
                 # Check if we should trigger background summarization
                 if len(body.messages) + 1 >= 30:
                     from chat.summarizer import summarize_chat_background
                     asyncio.create_task(summarize_chat_background(body.chat_id))
+
+            # Step 3: Evaluation logging — every answer is recorded for the Phase 8 dashboard
+            from chat.models import EvalLog
+            db.add(EvalLog(
+                workspace_id=chat.workspace_id,
+                chat_id=chat.id,
+                question=user_msg.content,
+                answer=full_response or None,
+                model_name=provider.model_name,
+                retrieved_chunks=retrieved_chunks,
+                latency_ms=int((time.perf_counter() - t0) * 1000),
+            ))
+            await db.commit()
 
         except Exception as e:
             yield {"event": "error", "data": json.dumps({"message": str(e)})}

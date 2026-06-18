@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column
-from sqlalchemy import String, DateTime, ForeignKey, JSON
+from sqlalchemy import String, DateTime, ForeignKey, JSON, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from auth.models import Base
@@ -71,4 +71,23 @@ class DocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(nullable=False)
     text_preview: Mapped[str] = mapped_column(String, nullable=False)  # first 200 chars
     qdrant_point_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), nullable=False)
+
+
+class EvalLog(Base):
+    """
+    One row per answered question — Phase 4 evaluation logging.
+    Captures the question, the chunks retrieved for RAG, the model used and the
+    latency, so the Phase 8 dashboard can be built over real data without UI yet.
+    """
+    __tablename__ = "eval_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    chat_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("chats.id", ondelete="SET NULL"), nullable=True)
+    question: Mapped[str] = mapped_column(String, nullable=False)
+    answer: Mapped[str | None] = mapped_column(String, nullable=True)
+    model_name: Mapped[str] = mapped_column(String, nullable=False)
+    retrieved_chunks: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), nullable=False)
