@@ -29,3 +29,7 @@ sentence-transformers==3.0.1
 # Testing
 pytest==9.1.0
 pytest-asyncio==1.4.0
+
+# Phase 5 (Crawler)
+beautifulsoup4==4.12.3
+apscheduler==3.10.4

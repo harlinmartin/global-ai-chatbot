@@ -182,3 +182,40 @@ async def delete_document(
     await db.commit()
 
     return {"status": "deleted", "id": doc_id}
+
+# ---------------------------------------------------------------------------
+# Crawler
+# ---------------------------------------------------------------------------
+
+@router.post("/crawl")
+async def start_crawl(
+    req: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Register a website and trigger a crawl task in the background."""
+    from chat.models import WebsiteSource
+    from docs.crawler import crawl_website
+    import asyncio
+    
+    workspace_id = req.get("workspace_id")
+    url = req.get("url")
+    if not workspace_id or not url:
+        raise HTTPException(status_code=400, detail="workspace_id and url required")
+
+    await _get_workspace_for_owner(workspace_id, current_user, db)
+        
+    source = WebsiteSource(workspace_id=workspace_id, base_url=url, status="pending")
+    db.add(source)
+    await db.commit()
+    await db.refresh(source)
+    
+    # We must use a separate session for background tasks
+    from database import async_session_maker
+    async def _bg_crawl(source_id):
+        async with async_session_maker() as session:
+            await crawl_website(source_id, session)
+
+    asyncio.create_task(_bg_crawl(source.id))
+    
+    return {"status": "started", "source_id": str(source.id)}

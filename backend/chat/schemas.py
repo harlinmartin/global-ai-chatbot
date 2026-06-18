@@ -54,3 +54,7 @@ class WorkspaceResponse(WorkspaceBase):
 
     class Config:
         from_attributes = True
+
+class CrawlRequest(BaseModel):
+    workspace_id: uuid.UUID
+    url: str

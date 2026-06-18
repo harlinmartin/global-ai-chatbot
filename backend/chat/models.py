@@ -46,8 +46,20 @@ class ChatSummary(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), nullable=False)
 
 
+class WebsiteSource(Base):
+    """One registered website to crawl periodically for a workspace."""
+    __tablename__ = "website_sources"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    base_url: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")  # pending | crawling | completed | failed
+    last_crawled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), nullable=False)
+
+
 class Document(Base):
-    """One uploaded file per workspace."""
+    """One uploaded file per workspace. Can also represent a scraped website page if filename is a URL."""
     __tablename__ = "documents"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

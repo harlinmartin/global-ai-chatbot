@@ -10,9 +10,18 @@ from api.messages import router as messages_router
 from api.widget import router as widget_router
 from api.docs import router as docs_router
 
+from contextlib import asynccontextmanager
+from scheduler import start_scheduler
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+    yield
+    
 app = FastAPI(
     title="AI Chatbot Backend",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS configuration
