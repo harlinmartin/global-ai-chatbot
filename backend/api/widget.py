@@ -10,7 +10,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from database import get_db
 from chat.models import Workspace, Chat, Message as DBMessage, ChatSummary
-from api.chat import SYSTEM_PROMPT, Message, status_event
+from api.chat import SYSTEM_PROMPT, Message, status_event, build_sources
 from ai.factory import get_ai_provider
 
 router = APIRouter()
@@ -148,22 +148,35 @@ async def widget_stream_chat(
                 full_response += token
                 yield {"event": "token", "data": json.dumps({"token": token})}
 
-            # Step 2: Save assistant response
+            # Extract sources
+            sources = build_sources(retrieved_chunks)
+
+            # Step 2: Save assistant response (persist sources alongside it)
             if full_response:
-                assistant_msg = DBMessage(chat_id=chat.id, role="assistant", content=full_response)
+                assistant_msg = DBMessage(
+                    chat_id=chat.id,
+                    role="assistant",
+                    content=full_response,
+                    metadata_={"sources": sources},
+                )
                 db.add(assistant_msg)
                 await db.commit()
                 await db.refresh(assistant_msg)
 
                 # Send the final ID down to the client so they can send feedback
-                yield {"event": "done", "data": json.dumps({"model": provider.model_name, "message_id": str(assistant_msg.id), "answer": full_response})}
+                yield {"event": "done", "data": json.dumps({
+                    "model": provider.model_name, 
+                    "message_id": str(assistant_msg.id), 
+                    "answer": full_response,
+                    "sources": sources
+                })}
 
                 # Check for summarization
                 if len(body.messages) + 1 >= 30:
                     from chat.summarizer import summarize_chat_background
                     asyncio.create_task(summarize_chat_background(str(chat.id)))
             else:
-                yield {"event": "done", "data": json.dumps({"model": provider.model_name})}
+                yield {"event": "done", "data": json.dumps({"model": provider.model_name, "sources": sources})}
 
             # Step 3: Evaluation logging — every answer is recorded for the Phase 8 dashboard
             from chat.models import EvalLog

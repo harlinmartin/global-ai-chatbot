@@ -28,18 +28,29 @@ OVERLAP_TOKENS = 50
 # Text extraction
 # ---------------------------------------------------------------------------
 
-def _extract_text(filename: str, content: bytes) -> str:
-    """Extract raw text from file bytes. Supports PDF and plain text."""
+def _extract_pages(filename: str, content: bytes) -> list[tuple[str, int | None]]:
+    """
+    Extract text from file bytes as a list of (text, page) tuples.
+
+    For PDFs each tuple is one page with a 1-based page number, so citations can
+    point at the exact page. For everything else (plain text, crawled HTML) the
+    whole document is a single tuple with page=None.
+    """
     if filename.lower().endswith(".pdf"):
         from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(content))
-        pages = [page.extract_text() or "" for page in reader.pages]
-        return "\n\n".join(pages)
+        return [(page.extract_text() or "", i + 1) for i, page in enumerate(reader.pages)]
     # Treat everything else as plain text (utf-8, fallback to latin-1)
     try:
-        return content.decode("utf-8")
+        text = content.decode("utf-8")
     except UnicodeDecodeError:
-        return content.decode("latin-1")
+        text = content.decode("latin-1")
+    return [(text, None)]
+
+
+def _extract_text(filename: str, content: bytes) -> str:
+    """Backwards-compatible flat text extraction (no page boundaries)."""
+    return "\n\n".join(text for text, _ in _extract_pages(filename, content))
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +73,22 @@ def _chunk_text(text: str) -> list[str]:
         if end == len(tokens):
             break
         start += CHUNK_TOKENS - OVERLAP_TOKENS
+    return chunks
+
+
+def _chunk_pages(pages: list[tuple[str, int | None]]) -> list[tuple[str, int | None]]:
+    """
+    Chunk each page independently so every chunk carries the page it came from.
+    Chunking per page (rather than over the whole document) keeps a chunk from
+    straddling a page boundary, which would make its citation ambiguous.
+    Returns a list of (chunk_text, page) tuples.
+    """
+    chunks: list[tuple[str, int | None]] = []
+    for text, page in pages:
+        if not text.strip():
+            continue
+        for chunk in _chunk_text(text):
+            chunks.append((chunk, page))
     return chunks
 
 
@@ -88,13 +115,14 @@ async def process_document(
         return
 
     try:
-        # 1. Extract
-        text = _extract_text(filename, content)
-        if not text.strip():
+        # 1. Extract (page-aware)
+        pages = _extract_pages(filename, content)
+        if not any(text.strip() for text, _ in pages):
             raise ValueError("No text could be extracted from the file.")
 
-        # 2. Chunk
-        chunks = _chunk_text(text)
+        # 2. Chunk (each chunk keeps the page it came from)
+        chunks_with_pages = _chunk_pages(pages)
+        chunks = [text for text, _ in chunks_with_pages]
 
         # 3. Embed (batch call — one network/CPU round-trip)
         vectors = await embedder.embed_texts(chunks)
@@ -106,7 +134,7 @@ async def process_document(
         qdrant_points: list[dict] = []
         db_chunks: list[DocumentChunk] = []
 
-        for i, (chunk_text, vector) in enumerate(zip(chunks, vectors)):
+        for i, ((chunk_text, page), vector) in enumerate(zip(chunks_with_pages, vectors)):
             point_id = str(uuid.uuid4())
             qdrant_points.append({
                 "id": point_id,
@@ -117,6 +145,7 @@ async def process_document(
                     "chunk_index": i,
                     "text": chunk_text,
                     "filename": filename,
+                    "page": page,
                 },
             })
             db_chunks.append(DocumentChunk(

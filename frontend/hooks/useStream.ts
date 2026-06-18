@@ -1,8 +1,15 @@
+export interface Source {
+  name: string;
+  type: string;
+  page?: number;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   isStreaming?: boolean;
+  sources?: Source[];
 }
 
 export interface StatusStep {
@@ -14,7 +21,7 @@ export interface StatusStep {
 interface StreamCallbacks {
   onStatus: (step: string, label: string, state: string) => void;
   onToken: (token: string) => void;
-  onDone: () => void;
+  onDone: (sources?: Source[]) => void;
   onError: (msg: string) => void;
 }
 
@@ -60,7 +67,7 @@ export async function streamChat(
           } else if (currentEvent === "token") {
             callbacks.onToken(data.token);
           } else if (currentEvent === "done") {
-            callbacks.onDone();
+            callbacks.onDone(data.sources);
           } else if (currentEvent === "error") {
             callbacks.onError(data.message ?? "Unknown error");
           }

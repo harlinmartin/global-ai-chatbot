@@ -79,10 +79,10 @@ export function useChat(initialMessages: Message[] = [], chatId?: string, provid
               )
             );
           },
-          onDone: () => {
+          onDone: (sources) => {
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === assistantId ? { ...m, isStreaming: false } : m
+                m.id === assistantId ? { ...m, isStreaming: false, sources } : m
               )
             );
             setSteps([]);
