@@ -82,6 +82,9 @@ class DocumentChunk(Base):
     workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     chunk_index: Mapped[int] = mapped_column(nullable=False)
     text_preview: Mapped[str] = mapped_column(String, nullable=False)  # first 200 chars
+    text_content: Mapped[str] = mapped_column(String, nullable=False, default="")  # full chunk text for FTS
+    filename: Mapped[str] = mapped_column(String, nullable=False, default="")  # source filename for FTS results
+    page: Mapped[int | None] = mapped_column(Integer, nullable=True)  # PDF page number if applicable
     qdrant_point_id: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), nullable=False)
 

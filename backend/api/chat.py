@@ -103,7 +103,7 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
             # Step 1.5: RAG — retrieve relevant context from the workspace knowledge base
             yield status_event("searching", "Searching knowledge base...", "active")
             from docs import rag
-            context_str, retrieved_chunks = await rag.get_context(chat.workspace_id, user_msg.content)
+            context_str, retrieved_chunks = await rag.get_context(chat.workspace_id, user_msg.content, db=db)
             yield status_event("searching", "Searching knowledge base...", "done")
 
             # Build messages: system prompt + summary + retrieved context + last 10 turns

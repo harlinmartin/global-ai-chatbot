@@ -147,7 +147,7 @@ async def widget_stream_chat(
             # Step 1.5: RAG — retrieve relevant context from the workspace knowledge base
             yield status_event("searching", "Searching knowledge base...", "active")
             from docs import rag
-            context_str, retrieved_chunks = await rag.get_context(workspace.id, user_msg.content)
+            context_str, retrieved_chunks = await rag.get_context(workspace.id, user_msg.content, db=db)
             yield status_event("searching", "Searching knowledge base...", "done")
 
             # Build messages

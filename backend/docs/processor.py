@@ -153,6 +153,9 @@ async def process_document(
                 workspace_id=workspace_id,
                 chunk_index=i,
                 text_preview=chunk_text[:200],
+                text_content=chunk_text,
+                filename=filename,
+                page=page,
                 qdrant_point_id=point_id,
             ))
 
