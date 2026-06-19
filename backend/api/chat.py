@@ -44,6 +44,32 @@ def status_event(step: str, label: str, state: str) -> dict:
         "data": json.dumps({"step": step, "label": label, "state": state}),
     }
 
+
+def build_sources(retrieved_chunks: list[dict]) -> list[dict]:
+    """
+    De-duplicate retrieved RAG chunks into citation sources for the `done` event.
+
+    A source is unique per (filename, page): a URL is detected by its scheme
+    (crawled pages store the URL as the filename), while uploaded files may carry
+    a 1-based PDF page number. Shape: {name, type: "url"|"file", page?}.
+    """
+    sources: list[dict] = []
+    seen: set = set()
+    for chunk in retrieved_chunks:
+        fname = chunk.get("filename")
+        if not fname:
+            continue
+        page = chunk.get("page")
+        key = (fname, page)
+        if key in seen:
+            continue
+        seen.add(key)
+        src = {"name": fname, "type": "url" if fname.startswith("http") else "file"}
+        if page is not None:
+            src["page"] = page
+        sources.append(src)
+    return sources
+
 @router.post("/stream")
 async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = Depends(get_db)):
     # Verify chat exists
@@ -105,11 +131,20 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
                 yield {"event": "token", "data": json.dumps({"token": token})}
 
             yield status_event("generating", "Generating response...", "done")
-            yield {"event": "done", "data": json.dumps({"model": provider.model_name, "answer": full_response})}
 
-            # Step 2: Save the AI's response
+            sources = build_sources(retrieved_chunks)
+
+            yield {"event": "done", "data": json.dumps({"model": provider.model_name, "answer": full_response, "sources": sources})}
+
+            # Step 2: Save the AI's response (persist sources so citation cards
+            # survive a page refresh / history reload)
             if full_response:
-                db.add(DBMessage(chat_id=body.chat_id, role="assistant", content=full_response))
+                db.add(DBMessage(
+                    chat_id=body.chat_id,
+                    role="assistant",
+                    content=full_response,
+                    metadata_={"sources": sources},
+                ))
                 await db.commit()
 
                 # Check if we should trigger background summarization
