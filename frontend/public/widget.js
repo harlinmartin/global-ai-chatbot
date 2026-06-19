@@ -1,4 +1,4 @@
-(function() {
+(function () {
   // Configuration
   const scriptTag = document.currentScript;
   const apiKey = scriptTag.getAttribute('data-api-key');

@@ -19,7 +19,7 @@ export default function WidgetHeader({ activeTab, setActiveTab, onNewChat, statu
           </div>
           <span className="font-semibold text-gray-800 tracking-tight">Ask AI</span>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {status === 'active' && (
             <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full font-medium">
@@ -33,7 +33,7 @@ export default function WidgetHeader({ activeTab, setActiveTab, onNewChat, statu
               Closed
             </span>
           )}
-          <button 
+          <button
             onClick={onNewChat}
             className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-colors"
             title="Start new chat"
@@ -47,21 +47,19 @@ export default function WidgetHeader({ activeTab, setActiveTab, onNewChat, statu
       <div className="flex px-4 gap-6">
         <button
           onClick={() => setActiveTab('chat')}
-          className={`pb-3 text-sm font-medium transition-colors relative ${
-            activeTab === 'chat' ? 'text-purple-600' : 'text-gray-500 hover:text-gray-800'
-          }`}
+          className={`pb-3 text-sm font-medium transition-colors relative ${activeTab === 'chat' ? 'text-purple-600' : 'text-gray-500 hover:text-gray-800'
+            }`}
         >
           Chat
           {activeTab === 'chat' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600 rounded-t-full"></div>
           )}
         </button>
-        
+
         <button
           onClick={() => setActiveTab('history')}
-          className={`pb-3 text-sm font-medium transition-colors relative flex items-center gap-1.5 ${
-            activeTab === 'history' ? 'text-purple-600' : 'text-gray-500 hover:text-gray-800'
-          }`}
+          className={`pb-3 text-sm font-medium transition-colors relative flex items-center gap-1.5 ${activeTab === 'history' ? 'text-purple-600' : 'text-gray-500 hover:text-gray-800'
+            }`}
         >
           History
           {historyCount > 0 && (

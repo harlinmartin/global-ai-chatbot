@@ -13,10 +13,10 @@ import { Suspense } from 'react';
 function EmbedChatContent() {
   const searchParams = useSearchParams();
   const apiKey = searchParams.get('api_key');
-  
+
   // Persist session ID in local storage for anonymous users
   const [sessionId, setSessionId] = useState<string>('');
-  
+
   useEffect(() => {
     let storedSession = localStorage.getItem('widget_session_id');
     if (!storedSession) {
@@ -25,12 +25,12 @@ function EmbedChatContent() {
     }
     setSessionId(searchParams.get('session_id') || storedSession);
   }, [searchParams]);
-  
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [steps, setSteps] = useState<StatusStep[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // UI States
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [status, setStatus] = useState<'active' | 'closed'>('active');
@@ -68,7 +68,7 @@ function EmbedChatContent() {
       const BACKEND_URL = 'http://localhost:8001';
       await fetch(`${BACKEND_URL}/api/widget/messages/${messageId}/feedback`, {
         method: "PATCH",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`
         },
@@ -106,18 +106,18 @@ function EmbedChatContent() {
       const BACKEND_URL = 'http://localhost:8001';
       const searchParams = new URL(window.location.href).searchParams;
       const origin = searchParams.get('origin');
-      
+
       const response = await fetch(`${BACKEND_URL}/api/widget/stream`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`
         },
-        body: JSON.stringify({ 
-          session_id: sessionId, 
-          messages: history, 
+        body: JSON.stringify({
+          session_id: sessionId,
+          messages: history,
           origin,
-          image_base64: imageBase64 
+          image_base64: imageBase64
         }),
       });
 
@@ -127,7 +127,7 @@ function EmbedChatContent() {
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error("No response body");
-      
+
       const decoder = new TextDecoder();
       let buffer = "";
       let currentEvent = "";
@@ -183,20 +183,20 @@ function EmbedChatContent() {
 
   return (
     <div className="flex flex-col h-screen w-full bg-white text-gray-900 font-sans">
-      <WidgetHeader 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        onNewChat={handleNewChat} 
+      <WidgetHeader
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onNewChat={handleNewChat}
         status={status}
         historyCount={0} // To be implemented
       />
-      
+
       {activeTab === 'chat' ? (
         <>
-          <WidgetChatWindow 
-            messages={messages} 
-            status={status} 
-            onNewChat={handleNewChat} 
+          <WidgetChatWindow
+            messages={messages}
+            status={status}
+            onNewChat={handleNewChat}
             onFeedback={handleFeedback}
           />
           {/* We reuse AIProcessPanel but wrap it in a light container if needed, though it's mostly self-contained */}

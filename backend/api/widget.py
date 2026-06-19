@@ -5,11 +5,11 @@ from typing import Optional
 from fastapi import APIRouter, Request, HTTPException, Depends, Header
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from sse_starlette.sse import EventSourceResponse
 
 from database import get_db
-from chat.models import Workspace, Chat, Message as DBMessage, ChatSummary
+from chat.models import Workspace, Chat, Message as DBMessage, ChatSummary, EvalLog
 from api.chat import SYSTEM_PROMPT, Message, status_event, build_sources
 from ai.factory import get_ai_provider
 
@@ -50,6 +50,22 @@ async def get_workspace_from_api_key(
     
     return workspace
 
+
+@router.get("/config")
+async def get_widget_config(workspace: Workspace = Depends(get_workspace_from_api_key)):
+    """
+    Public endpoint — returns the workspace's branding configuration.
+    Called by widget.js before rendering so the launcher button and iframe
+    can pick up the correct brand_color, greeting, and allowed_domains.
+    """
+    cfg = workspace.config or {}
+    return {
+        "brand_color": cfg.get("brand_color", "#4F46E5"),
+        "greeting": cfg.get("greeting", "Hi! How can I help you today?"),
+        "allowed_domains": cfg.get("allowed_domains", []),
+    }
+
+
 @router.post("/stream")
 async def widget_stream_chat(
     body: WidgetChatRequest, 
@@ -74,10 +90,20 @@ async def widget_stream_chat(
     # Origin Verification
     allowed_domains = workspace.config.get("allowed_domains", [])
     if allowed_domains and body.origin:
-        # Check if the requested origin is in the allowed list
-        # E.g., origin: "http://localhost:8080"
         if body.origin not in allowed_domains:
             raise HTTPException(status_code=403, detail="Domain not allowed")
+
+    # Quota Cap Enforcement — block when workspace message count >= cap
+    quota_cap = workspace.config.get("quota_cap", 1000)
+    usage_count_result = await db.execute(
+        select(func.count()).select_from(EvalLog).filter(EvalLog.workspace_id == workspace.id)
+    )
+    usage_count = usage_count_result.scalar_one()
+    if usage_count >= quota_cap:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Workspace quota of {quota_cap} messages has been reached. Please upgrade your plan."
+        )
 
     # Get or create chat for this anonymous session
     chat_result = await db.execute(
