@@ -209,6 +209,7 @@ async def widget_stream_chat(
             db.add(EvalLog(
                 workspace_id=workspace.id,
                 chat_id=chat.id,
+                message_id=assistant_msg.id if full_response else None,
                 question=user_msg.content,
                 answer=full_response or None,
                 model_name=provider.model_name,
@@ -249,6 +250,16 @@ async def widget_message_feedback(
     message.metadata_ = current_meta
     
     db.add(message)
+
+    # Update EvalLog
+    eval_log_result = await db.execute(
+        select(EvalLog).filter(EvalLog.message_id == message.id)
+    )
+    eval_log = eval_log_result.scalar_one_or_none()
+    if eval_log:
+        eval_log.feedback = body.feedback
+        db.add(eval_log)
+
     await db.commit()
     
     return {"status": "ok", "feedback": body.feedback}

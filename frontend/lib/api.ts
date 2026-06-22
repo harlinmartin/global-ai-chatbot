@@ -50,3 +50,9 @@ export async function deleteChat(chatId: string) {
   });
   if (!res.ok) throw new Error('Failed to delete chat');
 }
+
+export async function getEvaluations() {
+  const res = await fetchWithAuth('/api/admin/evaluations');
+  if (!res.ok) throw new Error('Failed to fetch evaluations');
+  return res.json();
+}

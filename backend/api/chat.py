@@ -154,9 +154,18 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
 
             # Step 3: Evaluation logging — every answer is recorded for the Phase 8 dashboard
             from chat.models import EvalLog
+            
+            # Since chat.py doesn't currently keep track of assistant_msg to fetch its ID, 
+            # let's fetch the ID of the last assistant message we just inserted
+            last_msg_result = await db.execute(
+                select(DBMessage).filter(DBMessage.chat_id == body.chat_id, DBMessage.role == "assistant").order_by(desc(DBMessage.created_at)).limit(1)
+            )
+            assistant_msg = last_msg_result.scalar_one_or_none()
+            
             db.add(EvalLog(
                 workspace_id=chat.workspace_id,
                 chat_id=chat.id,
+                message_id=assistant_msg.id if assistant_msg else None,
                 question=user_msg.content,
                 answer=full_response or None,
                 model_name=provider.model_name,
