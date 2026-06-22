@@ -11,6 +11,7 @@ export function useChat(initialMessages: Message[] = [], chatId?: string, provid
   const [steps, setSteps] = useState<StatusStep[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const abortRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const updateStepState = useCallback(
     (step: string, label: string, state: string) => {
@@ -28,10 +29,10 @@ export function useChat(initialMessages: Message[] = [], chatId?: string, provid
   );
 
   const sendMessage = useCallback(
-    async (content: string) => {
-      if (!content.trim() || isLoading) return;
+    async (content: string, imageBase64?: string) => {
+      if ((!content.trim() && !imageBase64) || isLoading) return;
 
-      const userMsg: Message = { id: uid(), role: "user", content };
+      const userMsg: Message = { id: uid(), role: "user", content, image_base64: imageBase64 };
       const assistantId = uid();
 
       setMessages((prev) => [
@@ -42,10 +43,12 @@ export function useChat(initialMessages: Message[] = [], chatId?: string, provid
       setSteps([]);
       setIsLoading(true);
       abortRef.current = false;
+      abortControllerRef.current = new AbortController();
 
       const history = [...messages, userMsg].map((m) => ({
         role: m.role,
         content: m.content,
+        image_base64: m.image_base64,
       }));
 
       let currentChatId = chatId;
@@ -89,6 +92,7 @@ export function useChat(initialMessages: Message[] = [], chatId?: string, provid
             setIsLoading(false);
           },
           onError: (msg) => {
+            if (abortRef.current) return;
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === assistantId
@@ -105,7 +109,8 @@ export function useChat(initialMessages: Message[] = [], chatId?: string, provid
           },
         },
         currentChatId,
-        provider
+        provider,
+        abortControllerRef.current.signal
       );
     },
     [messages, isLoading, updateStepState, provider]
@@ -113,10 +118,23 @@ export function useChat(initialMessages: Message[] = [], chatId?: string, provid
 
   const clearChat = useCallback(() => {
     abortRef.current = true;
+    if (abortControllerRef.current) abortControllerRef.current.abort();
     setMessages([]);
     setSteps([]);
     setIsLoading(false);
   }, []);
 
-  return { messages, steps, isLoading, sendMessage, clearChat };
+  const stopChat = useCallback(() => {
+    abortRef.current = true;
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.isStreaming ? { ...m, isStreaming: false } : m
+      )
+    );
+    setSteps([]);
+    setIsLoading(false);
+  }, []);
+
+  return { messages, steps, isLoading, sendMessage, clearChat, stopChat };
 }

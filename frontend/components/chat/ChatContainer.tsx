@@ -13,7 +13,7 @@ interface ChatContainerProps {
 
 export default function ChatContainer({ initialMessages = [], chatId }: ChatContainerProps) {
   const [provider, setProvider] = useState<string>("groq");
-  const { messages, steps, isLoading, sendMessage, clearChat } = useChat(initialMessages, chatId, provider);
+  const { messages, steps, isLoading, sendMessage, clearChat, stopChat } = useChat(initialMessages, chatId, provider);
 
   const handlePromptClick = useCallback(
     (prompt: string) => {
@@ -95,7 +95,7 @@ export default function ChatContainer({ initialMessages = [], chatId }: ChatCont
       <AIProcessPanel steps={steps} visible={isLoading} />
 
       {/* Input */}
-      <InputBar onSend={sendMessage} disabled={isLoading} />
+      <InputBar onSend={sendMessage} disabled={isLoading} isLoading={isLoading} onStop={stopChat} />
     </div>
   );
 }

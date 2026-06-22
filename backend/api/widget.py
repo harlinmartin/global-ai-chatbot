@@ -158,7 +158,24 @@ async def widget_stream_chat(
                 system_content += f"\n\n{context_str}"
 
             system = [{"role": "system", "content": system_content}]
-            history = [{"role": m.role, "content": m.content} for m in body.messages[-10:]]
+            history = []
+            for m in body.messages[-10:]:
+                # If the message itself has an image OR if this is the last message and the top-level request has an image
+                img_b64 = m.image_base64
+                if m == body.messages[-1] and not img_b64 and body.image_base64:
+                    img_b64 = body.image_base64
+                    
+                if img_b64:
+                    history.append({
+                        "role": m.role,
+                        "content": [
+                            {"type": "text", "text": m.content or "Analyze this image."},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                        ]
+                    })
+                else:
+                    history.append({"role": m.role, "content": m.content})
+                    
             messages = system + history
 
             yield status_event("thinking", "Understanding your message...", "active")

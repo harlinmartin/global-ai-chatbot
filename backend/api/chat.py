@@ -22,6 +22,7 @@ Rules:
 class Message(BaseModel):
     role: str  # "user" | "assistant" | "system"
     content: str
+    image_base64: str | None = None
 
 
 import uuid
@@ -114,7 +115,19 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
                 system_content += f"\n\n{context_str}"
 
             system = [{"role": "system", "content": system_content}]
-            history = [{"role": m.role, "content": m.content} for m in body.messages[-10:]]
+            history = []
+            for m in body.messages[-10:]:
+                if m.image_base64:
+                    history.append({
+                        "role": m.role,
+                        "content": [
+                            {"type": "text", "text": m.content or "Analyze this image."},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{m.image_base64}"}}
+                        ]
+                    })
+                else:
+                    history.append({"role": m.role, "content": m.content})
+                    
             messages = system + history
 
             yield status_event("thinking", "Understanding your message...", "active")

@@ -12,8 +12,17 @@ class GroqProvider(AIProvider):
     async def stream(
         self, messages: list[dict], **kwargs
     ) -> AsyncGenerator[str, None]:
+        # Detect if any message content is a list (multimodal)
+        is_vision = any(isinstance(m.get("content"), list) for m in messages)
+        
+        if is_vision:
+            yield "⚠️ **Groq Vision Unavailable:** Groq has temporarily decommissioned their Llama 3.2 Vision models. To analyze images right now, please switch your AI Provider to **Ollama** (Local) in the top-right corner of the chat and try again!"
+            return
+
+        model_to_use = self._model
+
         response = await self.client.chat.completions.create(
-            model=self._model,
+            model=model_to_use,
             messages=messages,
             stream=True,
             temperature=0.7,

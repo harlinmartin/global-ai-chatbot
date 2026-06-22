@@ -49,10 +49,19 @@ export default function MessageBubble({ message }: Props) {
         }
       >
         {isUser ? (
-          <p className="whitespace-pre-wrap">{message.content}</p>
+          <div className="flex flex-col gap-2">
+            {message.image_base64 && (
+              <img 
+                src={`data:image/jpeg;base64,${message.image_base64}`} 
+                alt="Uploaded by user" 
+                className="w-full max-w-sm rounded-lg object-contain"
+              />
+            )}
+            {message.content && <p className="whitespace-pre-wrap">{message.content}</p>}
+          </div>
         ) : (
           <div
-            className={`prose-ai ${message.isStreaming ? "streaming-cursor" : ""}`}
+            className={`prose-ai ${message.isStreaming && message.content ? "streaming-cursor" : ""}`}
           >
             {message.content ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
