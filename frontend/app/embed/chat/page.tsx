@@ -34,7 +34,18 @@ function EmbedChatContent() {
   // UI States
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [status, setStatus] = useState<'active' | 'closed'>('active');
-  const abortRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const stopChat = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setIsLoading(false);
+    setMessages((prev) => 
+      prev.map(m => m.isStreaming ? { ...m, isStreaming: false } : m)
+    );
+  }, []);
 
   useEffect(() => {
     if (!apiKey) {
@@ -107,6 +118,9 @@ function EmbedChatContent() {
       const searchParams = new URL(window.location.href).searchParams;
       const origin = searchParams.get('origin');
 
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       const response = await fetch(`${BACKEND_URL}/api/widget/stream`, {
         method: "POST",
         headers: {
@@ -119,6 +133,7 @@ function EmbedChatContent() {
           origin,
           image_base64: imageBase64
         }),
+        signal: controller.signal
       });
 
       if (!response.ok) {
@@ -203,7 +218,7 @@ function EmbedChatContent() {
           <div className="px-4">
             <AIProcessPanel steps={steps} visible={isLoading} />
           </div>
-          <WidgetInputBar onSend={sendMessage} disabled={isLoading || status === 'closed'} />
+          <WidgetInputBar onSend={sendMessage} onStop={stopChat} isLoading={isLoading} disabled={status === 'closed'} />
         </>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 text-gray-500 p-6 text-center">

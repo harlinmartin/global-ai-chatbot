@@ -130,3 +130,54 @@ async def get_dashboard_evaluations(
         ],
         "top_chunks": top_chunks
     }
+
+@router.get("/memories")
+async def get_dashboard_memories(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    ws_result = await db.execute(select(Workspace).filter(Workspace.owner_id == current_user.id).limit(1))
+    ws = ws_result.scalar_one_or_none()
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    from chat.models import Memory
+    memories_result = await db.execute(
+        select(Memory).filter(Memory.workspace_id == ws.id).order_by(desc(Memory.created_at))
+    )
+    memories = memories_result.scalars().all()
+
+    return {
+        "memories": [
+            {
+                "id": str(m.id),
+                "fact": m.fact,
+                "created_at": m.created_at.isoformat()
+            } for m in memories
+        ]
+    }
+
+@router.delete("/memories/{memory_id}")
+async def delete_dashboard_memory(
+    memory_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    ws_result = await db.execute(select(Workspace).filter(Workspace.owner_id == current_user.id).limit(1))
+    ws = ws_result.scalar_one_or_none()
+    if not ws:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    from chat.models import Memory
+    mem_result = await db.execute(
+        select(Memory).filter(Memory.id == memory_id, Memory.workspace_id == ws.id)
+    )
+    mem = mem_result.scalar_one_or_none()
+    
+    if not mem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Memory not found")
+
+    await db.delete(mem)
+    await db.commit()
+    
+    return {"status": "ok"}

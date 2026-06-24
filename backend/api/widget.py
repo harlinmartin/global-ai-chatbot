@@ -135,6 +135,10 @@ async def widget_stream_chat(
                 db.add(DBMessage(chat_id=chat.id, role="user", content=user_msg.content))
                 await db.commit()
 
+                # Trigger memory extraction background task
+                from ai.memory_extractor import background_process_memory
+                asyncio.create_task(background_process_memory(user_msg.content, workspace.id))
+
             # Fetch summary
             summary_result = await db.execute(
                 select(ChatSummary)
@@ -150,8 +154,19 @@ async def widget_stream_chat(
             context_str, retrieved_chunks = await rag.get_context(workspace.id, user_msg.content, db=db)
             yield status_event("searching", "Searching knowledge base...", "done")
 
+            # Fetch memories
+            from chat.models import Memory
+            memories_result = await db.execute(
+                select(Memory).filter(Memory.workspace_id == workspace.id)
+            )
+            memories = memories_result.scalars().all()
+
             # Build messages
             system_content = SYSTEM_PROMPT
+            if memories:
+                system_content += "\n\nHere are some personal facts and context to remember about the user/workspace:\n"
+                for mem in memories:
+                    system_content += f"- {mem.fact}\n"
             if latest_summary:
                 system_content += f"\n\nHere is a summary of the earlier conversation for context:\n{latest_summary.summary}"
             if context_str:
