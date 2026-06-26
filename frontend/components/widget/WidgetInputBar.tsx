@@ -3,10 +3,12 @@ import { Paperclip, Send, X } from "lucide-react";
 
 interface WidgetInputBarProps {
   onSend: (message: string, imageBase64?: string) => void;
+  onStop?: () => void;
+  isLoading?: boolean;
   disabled: boolean;
 }
 
-export default function WidgetInputBar({ onSend, disabled }: WidgetInputBarProps) {
+export default function WidgetInputBar({ onSend, onStop, isLoading, disabled }: WidgetInputBarProps) {
   const [input, setInput] = useState("");
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,7 +34,7 @@ export default function WidgetInputBar({ onSend, disabled }: WidgetInputBarProps
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!disabled) handleSend();
+      if (!disabled && !isLoading) handleSend();
     }
   };
 
@@ -64,7 +66,7 @@ export default function WidgetInputBar({ onSend, disabled }: WidgetInputBarProps
         <button
           onClick={() => fileInputRef.current?.click()}
           className="p-2 text-gray-400 hover:text-purple-600 transition-colors shrink-0 rounded-lg hover:bg-gray-100"
-          disabled={disabled}
+          disabled={disabled || isLoading}
         >
           <Paperclip className="w-5 h-5" />
           <input 
@@ -84,16 +86,26 @@ export default function WidgetInputBar({ onSend, disabled }: WidgetInputBarProps
           placeholder="Ask a question..."
           className="flex-1 max-h-32 bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none resize-none py-2 text-sm"
           rows={1}
-          disabled={disabled}
+          disabled={disabled || isLoading}
         />
 
-        <button
-          onClick={handleSend}
-          disabled={disabled || (!input.trim() && !imageBase64)}
-          className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 shadow-sm mb-0.5 mr-0.5"
-        >
-          <Send className="w-4 h-4" />
-        </button>
+        {isLoading ? (
+          <button
+            onClick={onStop}
+            className="p-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors shrink-0 shadow-sm mb-0.5 mr-0.5"
+            title="Stop generating"
+          >
+            <div className="w-3.5 h-3.5 bg-white rounded-sm m-[1px]"></div>
+          </button>
+        ) : (
+          <button
+            onClick={handleSend}
+            disabled={disabled || (!input.trim() && !imageBase64)}
+            className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 shadow-sm mb-0.5 mr-0.5"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        )}
       </div>
       <div className="text-center mt-2">
         <span className="text-[10px] text-gray-400">AI can make mistakes. Double-check replies.</span>

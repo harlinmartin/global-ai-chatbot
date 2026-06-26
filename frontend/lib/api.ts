@@ -50,3 +50,22 @@ export async function deleteChat(chatId: string) {
   });
   if (!res.ok) throw new Error('Failed to delete chat');
 }
+
+export async function getEvaluations() {
+  const res = await fetchWithAuth('/api/admin/evaluations');
+  if (!res.ok) throw new Error('Failed to fetch evaluations');
+  return res.json();
+}
+
+export async function getMemories() {
+  const res = await fetchWithAuth('/api/admin/memories');
+  if (!res.ok) throw new Error('Failed to fetch memories');
+  return res.json();
+}
+
+export async function deleteMemory(memoryId: string) {
+  const res = await fetchWithAuth(`/api/admin/memories/${memoryId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete memory');
+}

@@ -9,6 +9,7 @@ from api.chats import router as chats_router
 from api.messages import router as messages_router
 from api.widget import router as widget_router
 from api.docs import router as docs_router
+from api.admin import router as admin_router
 
 from contextlib import asynccontextmanager
 from scheduler import start_scheduler
@@ -41,6 +42,7 @@ app.include_router(chats_router)
 app.include_router(messages_router, tags=["chat"])
 app.include_router(widget_router, prefix="/api/widget")
 app.include_router(docs_router)
+app.include_router(admin_router)
 
 
 @app.get("/")

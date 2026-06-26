@@ -5,6 +5,8 @@ import type { StatusStep } from "@/hooks/useStream";
 const STEP_ICONS: Record<string, string> = {
   thinking: "🔍",
   generating: "🧠",
+  searching: "📚",
+  tool_exec: "⚙️",
 };
 
 interface Props {

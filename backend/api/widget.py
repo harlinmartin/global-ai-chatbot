@@ -135,6 +135,38 @@ async def widget_stream_chat(
                 db.add(DBMessage(chat_id=chat.id, role="user", content=user_msg.content))
                 await db.commit()
 
+                # Trigger memory extraction background task
+                from tasks.background_tasks import memory_task
+                memory_task.delay(user_msg.content, str(workspace.id))
+
+            # Human Handoff Check
+            handoff_keywords = ["human", "agent", "real person", "representative", "support person", "talk to someone"]
+            if not chat.is_human_handoff and any(k in user_msg.content.lower() for k in handoff_keywords):
+                chat.is_human_handoff = True
+                db.add(chat)
+                await db.commit()
+
+            if chat.is_human_handoff:
+                yield status_event("thinking", "Notifying human agents...", "active")
+                await asyncio.sleep(1)
+                yield status_event("thinking", "Notifying human agents...", "done")
+                handoff_msg = "A human agent has been notified and will be with you shortly. Please hold on!"
+                yield {"event": "token", "data": json.dumps({"token": handoff_msg})}
+                
+                # Save assistant placeholder
+                assistant_msg = DBMessage(chat_id=chat.id, role="assistant", content=handoff_msg)
+                db.add(assistant_msg)
+                await db.commit()
+                await db.refresh(assistant_msg)
+                
+                yield {"event": "done", "data": json.dumps({
+                    "model": "system-handoff", 
+                    "message_id": str(assistant_msg.id), 
+                    "answer": handoff_msg,
+                    "sources": []
+                })}
+                return
+
             # Fetch summary
             summary_result = await db.execute(
                 select(ChatSummary)
@@ -150,15 +182,43 @@ async def widget_stream_chat(
             context_str, retrieved_chunks = await rag.get_context(workspace.id, user_msg.content, db=db)
             yield status_event("searching", "Searching knowledge base...", "done")
 
+            # Fetch memories
+            from chat.models import Memory
+            memories_result = await db.execute(
+                select(Memory).filter(Memory.workspace_id == workspace.id)
+            )
+            memories = memories_result.scalars().all()
+
             # Build messages
             system_content = SYSTEM_PROMPT
+            if memories:
+                system_content += "\n\nHere are some personal facts and context to remember about the user/workspace:\n"
+                for mem in memories:
+                    system_content += f"- {mem.fact}\n"
             if latest_summary:
                 system_content += f"\n\nHere is a summary of the earlier conversation for context:\n{latest_summary.summary}"
             if context_str:
                 system_content += f"\n\n{context_str}"
 
             system = [{"role": "system", "content": system_content}]
-            history = [{"role": m.role, "content": m.content} for m in body.messages[-10:]]
+            history = []
+            for m in body.messages[-10:]:
+                # If the message itself has an image OR if this is the last message and the top-level request has an image
+                img_b64 = m.image_base64
+                if m == body.messages[-1] and not img_b64 and body.image_base64:
+                    img_b64 = body.image_base64
+                    
+                if img_b64:
+                    history.append({
+                        "role": m.role,
+                        "content": [
+                            {"type": "text", "text": m.content or "Analyze this image."},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                        ]
+                    })
+                else:
+                    history.append({"role": m.role, "content": m.content})
+                    
             messages = system + history
 
             yield status_event("thinking", "Understanding your message...", "active")
@@ -168,11 +228,29 @@ async def widget_stream_chat(
             yield status_event("generating", "Generating response...", "active")
 
             provider = get_ai_provider(body.provider)
-            async for token in provider.stream(messages):
+
+            # --- Agentic Tool Calling (Phase 12) ---
+            from ai.tool_registry import TOOL_DEFINITIONS
+
+            tool_status_events: list[dict] = []
+
+            async def on_tool_status(tool_name: str, label: str):
+                tool_status_events.append(status_event("tool_exec", label, "active"))
+
+            async for token in provider.stream_with_tools(
+                messages, TOOL_DEFINITIONS, on_tool_status=on_tool_status
+            ):
                 if await request.is_disconnected():
                     break
+                while tool_status_events:
+                    yield tool_status_events.pop(0)
                 full_response += token
                 yield {"event": "token", "data": json.dumps({"token": token})}
+
+            if tool_status_events:
+                for evt in tool_status_events:
+                    yield evt
+            yield status_event("tool_exec", "Tools complete", "done")
 
             # Extract sources
             sources = build_sources(retrieved_chunks)
@@ -199,8 +277,8 @@ async def widget_stream_chat(
 
                 # Check for summarization
                 if len(body.messages) + 1 >= 30:
-                    from chat.summarizer import summarize_chat_background
-                    asyncio.create_task(summarize_chat_background(str(chat.id)))
+                    from tasks.background_tasks import summarize_task
+                    summarize_task.delay(str(chat.id))
             else:
                 yield {"event": "done", "data": json.dumps({"model": provider.model_name, "sources": sources})}
 
@@ -209,6 +287,7 @@ async def widget_stream_chat(
             db.add(EvalLog(
                 workspace_id=workspace.id,
                 chat_id=chat.id,
+                message_id=assistant_msg.id if full_response else None,
                 question=user_msg.content,
                 answer=full_response or None,
                 model_name=provider.model_name,
@@ -249,6 +328,16 @@ async def widget_message_feedback(
     message.metadata_ = current_meta
     
     db.add(message)
+
+    # Update EvalLog
+    eval_log_result = await db.execute(
+        select(EvalLog).filter(EvalLog.message_id == message.id)
+    )
+    eval_log = eval_log_result.scalar_one_or_none()
+    if eval_log:
+        eval_log.feedback = body.feedback
+        db.add(eval_log)
+
     await db.commit()
     
     return {"status": "ok", "feedback": body.feedback}

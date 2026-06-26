@@ -10,6 +10,7 @@ export interface Message {
   content: string;
   isStreaming?: boolean;
   sources?: Source[];
+  image_base64?: string;
 }
 
 export interface StatusStep {
@@ -26,23 +27,26 @@ interface StreamCallbacks {
 }
 
 export async function streamChat(
-  messages: { role: string; content: string }[],
+  messages: { role: string; content: string; image_base64?: string }[],
   callbacks: StreamCallbacks,
   chatId?: string,
-  provider?: string
+  provider?: string,
+  signal?: AbortSignal
 ) {
-  const response = await fetch("/api/chat/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, chat_id: chatId, provider }),
-  });
+  try {
+    const response = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages, chat_id: chatId, provider }),
+      signal,
+    });
 
-  if (!response.ok || !response.body) {
-    callbacks.onError("Failed to connect to AI backend.");
-    return;
-  }
+    if (!response.ok || !response.body) {
+      callbacks.onError("Failed to connect to AI backend.");
+      return;
+    }
 
-  const reader = response.body.getReader();
+    const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let currentEvent = "";
@@ -76,5 +80,12 @@ export async function streamChat(
         }
       }
     }
+  }
+  } catch (error: any) {
+    if (error.name === "AbortError") {
+      // Chat was intentionally stopped by the user, not an error
+      return;
+    }
+    callbacks.onError(error.message || "Unknown error occurred");
   }
 }

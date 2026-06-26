@@ -1,4 +1,4 @@
-import { Sparkles, RotateCw } from "lucide-react";
+import { Sparkles, Plus } from "lucide-react";
 
 interface WidgetHeaderProps {
   activeTab: 'chat' | 'history';
@@ -35,10 +35,11 @@ export default function WidgetHeader({ activeTab, setActiveTab, onNewChat, statu
           )}
           <button
             onClick={onNewChat}
-            className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-md transition-colors"
             title="Start new chat"
           >
-            <RotateCw className="w-5 h-5" />
+            <Plus className="w-4 h-4" />
+            New Chat
           </button>
         </div>
       </div>

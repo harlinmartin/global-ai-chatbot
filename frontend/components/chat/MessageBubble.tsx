@@ -49,14 +49,33 @@ export default function MessageBubble({ message }: Props) {
         }
       >
         {isUser ? (
-          <p className="whitespace-pre-wrap">{message.content}</p>
+          <div className="flex flex-col gap-2">
+            {message.image_base64 && (
+              <img 
+                src={`data:image/jpeg;base64,${message.image_base64}`} 
+                alt="Uploaded by user" 
+                className="w-full max-w-sm rounded-lg object-contain"
+              />
+            )}
+            {message.content && <p className="whitespace-pre-wrap">{message.content}</p>}
+          </div>
         ) : (
           <div
-            className={`prose-ai ${message.isStreaming ? "streaming-cursor" : ""}`}
+            className={`prose-ai ${message.isStreaming && message.content ? "streaming-cursor" : ""}`}
           >
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {message.content || " "}
-            </ReactMarkdown>
+            {message.content ? (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {message.content}
+              </ReactMarkdown>
+            ) : message.isStreaming ? (
+              <div className="flex items-center gap-1.5 h-6 px-1">
+                <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></span>
+              </div>
+            ) : (
+              " "
+            )}
             {message.sources && message.sources.length > 0 && (
               <div className="mt-4 pt-3 border-t border-[var(--border)]">
                 <p className="text-xs text-[var(--text-secondary)] mb-2 font-medium uppercase tracking-wider">Sources</p>

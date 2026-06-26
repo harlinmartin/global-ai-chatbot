@@ -22,6 +22,7 @@ Rules:
 class Message(BaseModel):
     role: str  # "user" | "assistant" | "system"
     content: str
+    image_base64: str | None = None
 
 
 import uuid
@@ -89,6 +90,10 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
                 db.add(DBMessage(chat_id=body.chat_id, role="user", content=user_msg.content))
                 await db.commit()
 
+                # Trigger memory extraction background task
+                from tasks.background_tasks import memory_task
+                memory_task.delay(user_msg.content, str(chat.workspace_id))
+
             # Fetch summary
             from chat.models import ChatSummary
             from sqlalchemy import desc
@@ -106,15 +111,38 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
             context_str, retrieved_chunks = await rag.get_context(chat.workspace_id, user_msg.content, db=db)
             yield status_event("searching", "Searching knowledge base...", "done")
 
-            # Build messages: system prompt + summary + retrieved context + last 10 turns
+            # Fetch memories
+            from chat.models import Memory
+            memories_result = await db.execute(
+                select(Memory).filter(Memory.workspace_id == chat.workspace_id)
+            )
+            memories = memories_result.scalars().all()
+
+            # Build messages: system prompt + memories + summary + retrieved context + last 10 turns
             system_content = SYSTEM_PROMPT
+            if memories:
+                system_content += "\n\nHere are some personal facts and context to remember about the user/workspace:\n"
+                for mem in memories:
+                    system_content += f"- {mem.fact}\n"
             if latest_summary:
                 system_content += f"\n\nHere is a summary of the earlier conversation for context:\n{latest_summary.summary}"
             if context_str:
                 system_content += f"\n\n{context_str}"
 
             system = [{"role": "system", "content": system_content}]
-            history = [{"role": m.role, "content": m.content} for m in body.messages[-10:]]
+            history = []
+            for m in body.messages[-10:]:
+                if m.image_base64:
+                    history.append({
+                        "role": m.role,
+                        "content": [
+                            {"type": "text", "text": m.content or "Analyze this image."},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{m.image_base64}"}}
+                        ]
+                    })
+                else:
+                    history.append({"role": m.role, "content": m.content})
+                    
             messages = system + history
 
             yield status_event("thinking", "Understanding your message...", "active")
@@ -124,11 +152,33 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
             yield status_event("generating", "Generating response...", "active")
 
             provider = get_ai_provider(body.provider)
-            async for token in provider.stream(messages):
+
+            # --- Agentic Tool Calling (Phase 12) ---
+            from ai.tool_registry import TOOL_DEFINITIONS
+
+            # Collect SSE events that need to be yielded from the callback
+            tool_status_events: list[dict] = []
+
+            async def on_tool_status(tool_name: str, label: str):
+                """Callback invoked by the provider when a tool starts executing."""
+                tool_status_events.append(status_event("tool_exec", label, "active"))
+
+            async for token in provider.stream_with_tools(
+                messages, TOOL_DEFINITIONS, on_tool_status=on_tool_status
+            ):
                 if await request.is_disconnected():
                     break
+                # Flush any pending tool status events before yielding tokens
+                while tool_status_events:
+                    yield tool_status_events.pop(0)
                 full_response += token
                 yield {"event": "token", "data": json.dumps({"token": token})}
+
+            # Mark any active tool_exec steps as done
+            if tool_status_events:
+                for evt in tool_status_events:
+                    yield evt
+            yield status_event("tool_exec", "Tools complete", "done")
 
             yield status_event("generating", "Generating response...", "done")
 
@@ -149,14 +199,23 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
 
                 # Check if we should trigger background summarization
                 if len(body.messages) + 1 >= 30:
-                    from chat.summarizer import summarize_chat_background
-                    asyncio.create_task(summarize_chat_background(body.chat_id))
+                    from tasks.background_tasks import summarize_task
+                    summarize_task.delay(str(body.chat_id))
 
             # Step 3: Evaluation logging — every answer is recorded for the Phase 8 dashboard
             from chat.models import EvalLog
+            
+            # Since chat.py doesn't currently keep track of assistant_msg to fetch its ID, 
+            # let's fetch the ID of the last assistant message we just inserted
+            last_msg_result = await db.execute(
+                select(DBMessage).filter(DBMessage.chat_id == body.chat_id, DBMessage.role == "assistant").order_by(desc(DBMessage.created_at)).limit(1)
+            )
+            assistant_msg = last_msg_result.scalar_one_or_none()
+            
             db.add(EvalLog(
                 workspace_id=chat.workspace_id,
                 chat_id=chat.id,
+                message_id=assistant_msg.id if assistant_msg else None,
                 question=user_msg.content,
                 answer=full_response or None,
                 model_name=provider.model_name,
