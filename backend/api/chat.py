@@ -91,8 +91,8 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
                 await db.commit()
 
                 # Trigger memory extraction background task
-                from ai.memory_extractor import background_process_memory
-                asyncio.create_task(background_process_memory(user_msg.content, chat.workspace_id))
+                from tasks.background_tasks import memory_task
+                memory_task.delay(user_msg.content, str(chat.workspace_id))
 
             # Fetch summary
             from chat.models import ChatSummary
@@ -152,11 +152,33 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
             yield status_event("generating", "Generating response...", "active")
 
             provider = get_ai_provider(body.provider)
-            async for token in provider.stream(messages):
+
+            # --- Agentic Tool Calling (Phase 12) ---
+            from ai.tool_registry import TOOL_DEFINITIONS
+
+            # Collect SSE events that need to be yielded from the callback
+            tool_status_events: list[dict] = []
+
+            async def on_tool_status(tool_name: str, label: str):
+                """Callback invoked by the provider when a tool starts executing."""
+                tool_status_events.append(status_event("tool_exec", label, "active"))
+
+            async for token in provider.stream_with_tools(
+                messages, TOOL_DEFINITIONS, on_tool_status=on_tool_status
+            ):
                 if await request.is_disconnected():
                     break
+                # Flush any pending tool status events before yielding tokens
+                while tool_status_events:
+                    yield tool_status_events.pop(0)
                 full_response += token
                 yield {"event": "token", "data": json.dumps({"token": token})}
+
+            # Mark any active tool_exec steps as done
+            if tool_status_events:
+                for evt in tool_status_events:
+                    yield evt
+            yield status_event("tool_exec", "Tools complete", "done")
 
             yield status_event("generating", "Generating response...", "done")
 
@@ -177,8 +199,8 @@ async def stream_chat(body: ChatRequest, request: Request, db: AsyncSession = De
 
                 # Check if we should trigger background summarization
                 if len(body.messages) + 1 >= 30:
-                    from chat.summarizer import summarize_chat_background
-                    asyncio.create_task(summarize_chat_background(body.chat_id))
+                    from tasks.background_tasks import summarize_task
+                    summarize_task.delay(str(body.chat_id))
 
             # Step 3: Evaluation logging — every answer is recorded for the Phase 8 dashboard
             from chat.models import EvalLog

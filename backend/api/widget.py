@@ -136,8 +136,36 @@ async def widget_stream_chat(
                 await db.commit()
 
                 # Trigger memory extraction background task
-                from ai.memory_extractor import background_process_memory
-                asyncio.create_task(background_process_memory(user_msg.content, workspace.id))
+                from tasks.background_tasks import memory_task
+                memory_task.delay(user_msg.content, str(workspace.id))
+
+            # Human Handoff Check
+            handoff_keywords = ["human", "agent", "real person", "representative", "support person", "talk to someone"]
+            if not chat.is_human_handoff and any(k in user_msg.content.lower() for k in handoff_keywords):
+                chat.is_human_handoff = True
+                db.add(chat)
+                await db.commit()
+
+            if chat.is_human_handoff:
+                yield status_event("thinking", "Notifying human agents...", "active")
+                await asyncio.sleep(1)
+                yield status_event("thinking", "Notifying human agents...", "done")
+                handoff_msg = "A human agent has been notified and will be with you shortly. Please hold on!"
+                yield {"event": "token", "data": json.dumps({"token": handoff_msg})}
+                
+                # Save assistant placeholder
+                assistant_msg = DBMessage(chat_id=chat.id, role="assistant", content=handoff_msg)
+                db.add(assistant_msg)
+                await db.commit()
+                await db.refresh(assistant_msg)
+                
+                yield {"event": "done", "data": json.dumps({
+                    "model": "system-handoff", 
+                    "message_id": str(assistant_msg.id), 
+                    "answer": handoff_msg,
+                    "sources": []
+                })}
+                return
 
             # Fetch summary
             summary_result = await db.execute(
@@ -200,11 +228,29 @@ async def widget_stream_chat(
             yield status_event("generating", "Generating response...", "active")
 
             provider = get_ai_provider(body.provider)
-            async for token in provider.stream(messages):
+
+            # --- Agentic Tool Calling (Phase 12) ---
+            from ai.tool_registry import TOOL_DEFINITIONS
+
+            tool_status_events: list[dict] = []
+
+            async def on_tool_status(tool_name: str, label: str):
+                tool_status_events.append(status_event("tool_exec", label, "active"))
+
+            async for token in provider.stream_with_tools(
+                messages, TOOL_DEFINITIONS, on_tool_status=on_tool_status
+            ):
                 if await request.is_disconnected():
                     break
+                while tool_status_events:
+                    yield tool_status_events.pop(0)
                 full_response += token
                 yield {"event": "token", "data": json.dumps({"token": token})}
+
+            if tool_status_events:
+                for evt in tool_status_events:
+                    yield evt
+            yield status_event("tool_exec", "Tools complete", "done")
 
             # Extract sources
             sources = build_sources(retrieved_chunks)
@@ -231,8 +277,8 @@ async def widget_stream_chat(
 
                 # Check for summarization
                 if len(body.messages) + 1 >= 30:
-                    from chat.summarizer import summarize_chat_background
-                    asyncio.create_task(summarize_chat_background(str(chat.id)))
+                    from tasks.background_tasks import summarize_task
+                    summarize_task.delay(str(chat.id))
             else:
                 yield {"event": "done", "data": json.dumps({"model": provider.model_name, "sources": sources})}
 

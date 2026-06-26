@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column
-from sqlalchemy import String, DateTime, ForeignKey, JSON, Integer
+from sqlalchemy import String, DateTime, ForeignKey, JSON, Integer, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from auth.models import Base
@@ -24,6 +24,7 @@ class Chat(Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     session_id: Mapped[str | None] = mapped_column(String, nullable=True)
     title: Mapped[str] = mapped_column(String, nullable=False, default="New Chat")
+    is_human_handoff: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), nullable=False)
 
 class Message(Base):

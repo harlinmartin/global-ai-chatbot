@@ -210,12 +210,7 @@ async def start_crawl(
     await db.commit()
     await db.refresh(source)
     
-    # We must use a separate session for background tasks
-    from database import async_session_maker
-    async def _bg_crawl(source_id):
-        async with async_session_maker() as session:
-            await crawl_website(source_id, session)
-
-    asyncio.create_task(_bg_crawl(source.id))
+    from tasks.background_tasks import crawl_task
+    crawl_task.delay(str(source.id))
     
     return {"status": "started", "source_id": str(source.id)}
